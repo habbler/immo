@@ -1,0 +1,10 @@
+extra-deps: []
+resolver: lts-2.22
+flags: {}
+packages:
+- '.'
+extra-deps:
+- HaskellNet-0.4.5
+- HaskellNet-SSL-0.3.0.0
+- mime-0.4.0.2
+- scalpel-0.2.1
