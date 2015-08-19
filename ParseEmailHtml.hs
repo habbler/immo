@@ -21,10 +21,11 @@ parseEmailHtml eHtml
 extractRef :: T.Text -> Maybe (Maybe BS.ByteString)
 extractRef = lookup "kd" . parseQuery . (urlDecode False) . encodeUtf8
 
-unForwardRef ref
-  = case T.breakOn "/expose/" $ T.takeWhile (/= '?') ref of
+unForwardRef :: T.Text -> T.Text
+unForwardRef ref =
+  case T.breakOn "/expose/" $ T.takeWhile (/= '?') ref of
        (p1,p2) -> case T.breakOnEnd "/" p1 of
-                         (p11, p12) -> T.concat [T.replace "forward" "www" p11, T.tail p2] 
+                         (p11, _) -> T.concat [T.replace "forward" "www" p11, T.tail p2] 
                             
 
 fTitle :: Tag T.Text -> Maybe BS.ByteString 
