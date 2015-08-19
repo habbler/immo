@@ -16,6 +16,7 @@ import Codec.MIME.Parse
 import Codec.MIME.Type
 -- import Codec.MIME.QuotedPrintable as QP
 import           Database.Persist as P
+import qualified Data.Text as T
 
 
 -- import System.IO
@@ -55,7 +56,7 @@ connectEmailServer index = do
 -- test1 :: IO ()
 fetchNewEmails :: IO [EmailRaw]
 fetchNewEmails
-      = do con <- connectEmailServer 0
+      = do con <- connectEmailServer 1
            num <- list con 4
            print $ "num " ++ (show num)
            nr <- stat con
@@ -64,6 +65,7 @@ fetchNewEmails
            uidls <- allUIDLs con
            readUidls <- dbReadKeys
            let newUidls = filter (\(_, uidl') -> notElem uidl' readUidls) uidls
+           print $ "new emails: " ++ (show $ length newUidls)
            emailRaw <- mapM (fEmailRaw con) newUidls
            -- let msg1 = parseMIMEMessage (decodeUtf8 msg)
            closePop3 con
@@ -112,8 +114,7 @@ msgRetrieveRefs msg =
            -- TIO.writeFile "test.txt" out1  
            in parseEmailHtml out1
 
-dbCalcEmailRefs = do
-  rawEmails :: [Entity EmailRaw] <- selectList [] []
+dbCalcEmailRefs rawEmails = do
   return $! concatMap (\rawEmailEntity -> 
                    let rawEmail = entityVal rawEmailEntity
                        msg = parseMIMEMessage
@@ -123,14 +124,22 @@ dbCalcEmailRefs = do
                    in map (\ref -> EmailLinks uidl1 $ decodeUtf8 ref) refs) $ rawEmails
 
 dbWriteLinks = runDB $ do
-  emailLinks <- dbCalcEmailRefs 
+  rawEmails :: [Entity EmailRaw] <- selectList [] []
+  emailLinks <- dbCalcEmailRefs rawEmails 
   insertMany_ emailLinks
 
-   
-                     
+test10 = runDB $ do
+  rawEmails :: [Entity EmailRaw] <- selectList
+       [EmailRawDate ==. "Tue, 4 Aug 2015 09:42:22 +0200 (CEST)"] []
+  let rawEmail = entityVal $ head rawEmails
+      msg = parseMIMEMessage (decodeUtf8 $ emailRawRawMessage rawEmail)
+      refs = msgRetrieveRefs msg
+      Multi content = mime_val_content msg
+      -- Single out = mime_val_content $ content !! 0
+      Single out1 = mime_val_content $ content !! 1
+  return refs -- $ T.take 100 out1
+
+--test11 = do out1 <- test10
+--            TIO.writeFile "immo24.html" out1
 
 
-  
-
--- tWohn = "Wohnfläche"
-         
