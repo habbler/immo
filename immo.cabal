@@ -31,12 +31,10 @@ library
                      , http-conduit >= 2.1.5
                      , http-types >= 0.8.3
                      , mime
-                     , monad-control >= 0.3.2.2
+                     , mtl >= 2.1.2
                      , network >= 2.6.0.2
-                     , persistent >= 2.2
-                     , persistent-sqlite >= 2.2
-                     , persistent-template >= 2.1
                      , scalpelw
+                     , sqlite-simple >= 0.4.9.0
                      , tagsoup >= 0.13
                      , text
                      , transformers >= 0.3.0.0

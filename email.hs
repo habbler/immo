@@ -16,10 +16,7 @@ import Data.Text.Encoding
 import Codec.MIME.Parse
 import Codec.MIME.Type
 -- import Codec.MIME.QuotedPrintable as QP
-import           Database.Persist as P
 -- import qualified Data.Text as T
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Control 
 
 -- import System.IO
 --import Data.Maybe
@@ -28,6 +25,7 @@ import Control.Monad.Trans.Control
 import ParseEmailHtml
 
 import Database
+import           Database.SQLite.Simple
 
 import Data.List
 import Data.Maybe
@@ -116,28 +114,29 @@ msgRetrieveRefs msg =
            -- TIO.writeFile "test.txt" out1  
            in parseEmailHtml out1
 
-dbCalcEmailRefs :: Monad m => [Entity EmailRaw] -> m [EmailLinks]
+dbCalcEmailRefs :: Monad m => [EmailRaw] -> m [EmailLinks]
 dbCalcEmailRefs rawEmails = do
-  return $! concatMap (\rawEmailEntity -> 
-                   let rawEmail = entityVal rawEmailEntity
-                       msg = parseMIMEMessage
-                                  (decodeUtf8 $ emailRawRawMessage rawEmail)
+  return $! concatMap (\rawEmail -> 
+                   let msg = parseMIMEMessage
+                                  (decodeUtf8 $ rawMessage rawEmail)
                        refs = msgRetrieveRefs msg
-                       uidl1 = emailRawUidl rawEmail
+                       uidl1 = erUidl rawEmail
                    in map (\ref -> EmailLinks uidl1 $ decodeUtf8 ref) refs) $ rawEmails
 
-dbWriteLinks :: (MonadIO m, MonadBaseControl IO m) => m ()
-dbWriteLinks = runDB $ do
-  rawEmails :: [Entity EmailRaw] <- selectList [] []
+dbWriteLinks :: IO ()
+dbWriteLinks = runDB $ \conn -> do
+  -- rawEmails :: [Entity EmailRaw] <- selectList [] []
+  rawEmails <- dbEmailNoLinks conn
   emailLinks <- dbCalcEmailRefs rawEmails 
-  insertMany_ emailLinks
+  insertEmailLinks conn emailLinks
 
-test10 :: (MonadIO m, MonadBaseControl IO m) => m [BS.ByteString]
-test10 = runDB $ do
-  rawEmails :: [Entity EmailRaw] <- selectList
-       [EmailRawDate ==. "Tue, 4 Aug 2015 09:42:22 +0200 (CEST)"] []
-  let rawEmail = entityVal $ head rawEmails
-      msg = parseMIMEMessage (decodeUtf8 $ emailRawRawMessage rawEmail)
+test10 :: IO [BS.ByteString]
+test10 = runDB $ \conn -> do
+  rawMsg1 :: [Only BS.ByteString] <- query_ conn
+        "select raw_message from email_raw where \
+          \ date = 'Tue, 4 Aug 2015 09:42:22 +0200 (CEST)'"
+  let rawMsg = fromOnly $ head rawMsg1
+      msg = parseMIMEMessage (decodeUtf8 $ rawMsg )
       refs = msgRetrieveRefs msg
       -- Multi content = mime_val_content msg
       -- Single out = mime_val_content $ content !! 0

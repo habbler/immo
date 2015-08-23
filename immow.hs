@@ -188,7 +188,7 @@ test6 fn = do rawRecs <- read <$> readFile "all.text"
 
 test7 :: FilePath -> IO ()
 test7 fn = do pages <- dbReadPages
-              rawRecs <- mapM (\(url, page) -> do
+              rawRecs <- mapM (\(LinkRaw url page) -> do
                                  TIO.putStrLn url
                                  let p = parsePage $ decodeUtf8 page
                                  -- print p
