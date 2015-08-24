@@ -12,6 +12,7 @@ import qualified Data.ByteString.Lazy as BL
 import Control.Exception
 
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 
 import Data.Text.Encoding
 import Network ( withSocketsDo )
@@ -71,14 +72,23 @@ dbReadKeys = runDB $ \conn -> do
 dbStorePages :: IO ()
 dbStorePages = withSocketsDo $ runDB $ \conn -> do
   httpLinks :: [Only T.Text]
-     <- query_ conn "SELECT DISTINCT http_Link FROM email_links"
-  linkRaw <- mapM (\(Only link) ->
-                     do page <- catch (simpleHttp $ T.unpack link)
-                          (\e -> do let err = show (e :: HttpException)
-                                    putStrLn err
-                                    return "")                          
-                        return $! LinkRaw link $ BL.toStrict page) httpLinks
-  insertLinkRaw conn linkRaw
+     <- query_ conn "SELECT DISTINCT http_Link FROM email_links \
+                       \ where not exists(select * from link_raw where http_link = email_links.http_link)"
+  mapM_ (\(Only link) ->
+    do TIO.putStrLn link
+       page <- catch ((simpleHttp $ T.unpack link) >>= return . Just)
+         (\e -> do let err = show (e :: HttpException)
+                   TIO.putStrLn "Failed!"
+                   let fn = T.unpack $ snd $  T.breakOnEnd "/" link
+                   writeFile fn  err            
+                   -- putStrLn err
+                   return Nothing)
+       case page of
+          Just p1 -> execute conn "insert into link_raw values (?,?)" $
+                                LinkRaw link $ BL.toStrict p1
+          Nothing -> return () -- $! 
+                               ) $ httpLinks
+--    insertLinkRaw conn linkRaw
 
 insertLinkRaw :: Connection -> [LinkRaw] -> IO ()
 insertLinkRaw conn = mapM_ (execute conn "insert into link_raw values (?,?)") 
