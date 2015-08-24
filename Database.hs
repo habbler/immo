@@ -54,7 +54,8 @@ instance FromRow LinkRaw where
    fromRow = LinkRaw <$> field <*> field 
 
 dbWriteEmails :: [EmailRaw] -> IO ()
-dbWriteEmails rawEmails = runDB $ \conn -> insertEmailRaw conn rawEmails
+dbWriteEmails rawEmails = runDB $ \conn -> withTransaction conn $ 
+          insertEmailRaw conn rawEmails
   
 insertEmailRaw :: Connection -> [EmailRaw] -> IO ()
 insertEmailRaw conn = 
@@ -95,7 +96,7 @@ dbReadPages = runDB $ \conn -> do
 dbEmailNoLinks :: Connection -> IO [EmailRaw]
 dbEmailNoLinks conn = do
   rawEmails :: [EmailRaw] <- query_ conn
-      "select ?? from email_raw \
+      "select * from email_raw \
         \ where not exists (select * from email_links where uidl = email_raw.uidl)"
   return rawEmails
 
@@ -106,7 +107,5 @@ testDb01 = runDB $ \conn -> do
                 
 
 runDB :: (Connection -> IO b) -> IO b
-runDB body = do conn <- open "Email.sqlite3"
-                result <- body conn 
-                close  conn
-                return result
+runDB = withConnection "Email.sqlite3"
+

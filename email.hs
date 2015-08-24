@@ -54,9 +54,9 @@ connectEmailServer index = do
   return con
 
 -- test1 :: IO ()
-fetchNewEmails :: IO [EmailRaw]
-fetchNewEmails
-      = do con <- connectEmailServer 1
+fetchNewEmails :: Int -> IO [EmailRaw]
+fetchNewEmails eServer
+      = do con <- connectEmailServer eServer 
            num <- list con 4
            print $ "num " ++ (show num)
            nr <- stat con
@@ -71,14 +71,17 @@ fetchNewEmails
            closePop3 con
            return $! emailRaw
 
-
+-- | Read emails and write them to the database
 test3 :: IO ()
-test3 = dbWriteEmails =<< fetchNewEmails
+test3 =  do dbWriteEmails =<< fetchNewEmails 0
+            dbWriteEmails =<< fetchNewEmails 1  
 
--- test2  :: IO (BS.ByteString, BS.ByteString)
+
+-- | Test read email (no write)
 test2 :: IO EmailRaw
-test2 = head <$> fetchNewEmails
+test2 = head <$> fetchNewEmails 0
 
+-- | Obsolete: read emails from email server, and extract url's
 readEmails :: IO [[BS.ByteString]]
 readEmails
       = do con <- connectEmailServer 0
@@ -86,7 +89,7 @@ readEmails
            print $ "stat " ++ (show nr)
            let procEmail nr1
                   = do msg <- retr con nr1 
-                       return $! msgRetrieveRefs
+                       return $! msgExtractRefs
                            $ parseMIMEMessage (decodeUtf8 msg) 
            links <- mapM procEmail [1..nr]
            closePop3 con
@@ -105,8 +108,9 @@ test4
            return $! headers
 -- ["return-path","received","dkim-signature","domainkey-signature","received","date","from","reply-to","to","message-id","subject","mime-version","content-type","x-mid","x-job","x-rpcampaign","x-orgid","list-unsubscribe","envelope-to","authentication-results","x-tdresult","x-tdcapabilities","x-ui-filterresults"]
 
-msgRetrieveRefs :: MIMEValue -> [BS.ByteString]
-msgRetrieveRefs msg = 
+-- | Given a mime representation of an email, scan it for references
+msgExtractRefs :: MIMEValue -> [BS.ByteString]
+msgExtractRefs msg = 
            let Multi content = mime_val_content msg
                -- Single out = mime_val_content $ content !! 0
                Single out1 = mime_val_content $ content !! 1
@@ -114,20 +118,22 @@ msgRetrieveRefs msg =
            -- TIO.writeFile "test.txt" out1  
            in parseEmailHtml out1
 
-dbCalcEmailRefs :: Monad m => [EmailRaw] -> m [EmailLinks]
-dbCalcEmailRefs rawEmails = do
+-- | Convert email to MIME and extract the refs from it
+calcEmailRefs :: Monad m => [EmailRaw] -> m [EmailLinks]
+calcEmailRefs rawEmails = do
   return $! concatMap (\rawEmail -> 
                    let msg = parseMIMEMessage
                                   (decodeUtf8 $ rawMessage rawEmail)
-                       refs = msgRetrieveRefs msg
+                       refs = msgExtractRefs msg
                        uidl1 = erUidl rawEmail
                    in map (\ref -> EmailLinks uidl1 $ decodeUtf8 ref) refs) $ rawEmails
 
+-- | Read emails from DB, extract urls and store in database
 dbWriteLinks :: IO ()
 dbWriteLinks = runDB $ \conn -> do
-  -- rawEmails :: [Entity EmailRaw] <- selectList [] []
+  -- Get the raw emails that do not have entries in the link table
   rawEmails <- dbEmailNoLinks conn
-  emailLinks <- dbCalcEmailRefs rawEmails 
+  emailLinks <- calcEmailRefs rawEmails 
   insertEmailLinks conn emailLinks
 
 test10 :: IO [BS.ByteString]
@@ -137,7 +143,7 @@ test10 = runDB $ \conn -> do
           \ date = 'Tue, 4 Aug 2015 09:42:22 +0200 (CEST)'"
   let rawMsg = fromOnly $ head rawMsg1
       msg = parseMIMEMessage (decodeUtf8 $ rawMsg )
-      refs = msgRetrieveRefs msg
+      refs = msgExtractRefs msg
       -- Multi content = mime_val_content msg
       -- Single out = mime_val_content $ content !! 0
       -- Single out1 = mime_val_content $ content !! 1
